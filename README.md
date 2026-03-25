@@ -6,18 +6,18 @@
 
 ## 效果预览
 
-![报告总览](pics/preview-header.png)
+<p align="center"><img src="pics/preview-header.png" width="70%" alt="报告总览"></p>
 
 <table>
 <tr>
 <td width="50%"><img src="pics/preview-wordcloud-big5.png" alt="词云对比 + Big Five 蝴蝶图"></td>
 <td width="50%"><img src="pics/preview-heatmap.png" alt="聊天频率热力图"></td>
 </tr>
-<tr>
-<td width="50%"><img src="pics/preview-mbti.png" alt="MBTI 双人推断"></td>
-<td width="50%"><img src="pics/preview-style.png" alt="AI 风格总结"></td>
-</tr>
 </table>
+
+<p align="center"><img src="pics/preview-mbti.png" width="70%" alt="MBTI 双人推断"></p>
+
+<p align="center"><img src="pics/preview-style.png" width="70%" alt="AI 风格总结"></p>
 
 所有内容整合为一份精美 HTML 报告，图表可直接截图发布。
 
