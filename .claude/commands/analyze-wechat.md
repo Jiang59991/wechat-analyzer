@@ -18,14 +18,7 @@ DECRYPT_TOOL="${WECHAT_DECRYPT_DIR:-$HOME/Documents/wechat-db-decrypt-macos}"
 
 ## 完整流程
 
-### 步骤 1：确认用户想分析谁
-
-如果调用时未说明联系人，使用 AskUserQuestion 询问：
-> "你想分析和谁的聊天记录？（输入对方的备注名或微信昵称）"
-
----
-
-### 步骤 2：安装 Python 依赖（自动）
+### 步骤 1：安装 Python 依赖（自动）
 
 ```bash
 # 使用 venv 隔离依赖，避免污染系统 Python
@@ -42,7 +35,7 @@ source "$VENV/bin/activate"
 
 ---
 
-### 步骤 3：安装解密工具（自动，首次）
+### 步骤 2：安装解密工具（自动，首次）
 
 解密工具依赖 `sqlcipher`（用于解密数据库）和系统自带的 `lldb`（用于提取密钥，需要 SIP 关闭）。
 
@@ -61,7 +54,7 @@ which sqlcipher >/dev/null 2>&1 || brew install sqlcipher
 
 ---
 
-### 步骤 4：三级状态检查（最小化 SIP 操作）
+### 步骤 3：三级状态检查（最小化 SIP 操作）
 
 > 核心原则：只有在密钥文件不存在时才需要 SIP 关闭。已解密的用户永远不需要再碰 SIP。
 
@@ -71,7 +64,7 @@ which sqlcipher >/dev/null 2>&1 || brew install sqlcipher
 ls "$DECRYPT_TOOL/decrypted/"*.db 2>/dev/null && echo "DB_FOUND" || echo "DB_NOT_FOUND"
 ```
 
-**若 `DB_FOUND`**：直接跳到步骤 7，完全跳过所有 SIP 相关步骤。
+**若 `DB_FOUND`**：数据库就绪，直接跳到步骤 5（询问联系人），完全跳过所有 SIP 相关步骤。
 
 ---
 
@@ -87,7 +80,7 @@ ls "$DECRYPT_TOOL/wechat_keys.json" 2>/dev/null && echo "KEY_FOUND" || echo "KEY
 cd "$DECRYPT_TOOL" && python3 decrypt_db.py 2>&1
 ```
 
-成功后记录 `$DECRYPT_TOOL/decrypted/` 路径，跳到步骤 7。
+成功后记录 `$DECRYPT_TOOL/decrypted/` 路径，跳到步骤 5（询问联系人）。
 
 ---
 
@@ -102,11 +95,11 @@ csrutil status
   >
   > 步骤：关机 → 按住电源键进入恢复模式 → 实用工具 → 终端 → `csrutil disable` → `reboot`"
 
-- 若输出包含 `disabled`：继续步骤 5。
+- 若输出包含 `disabled`：继续步骤 4。
 
 ---
 
-### 步骤 5：提取密钥（需要 SIP 关闭，仅此一次）
+### 步骤 4：提取密钥（需要 SIP 关闭，仅此一次）
 
 先用 AskUserQuestion 确认：
 > "准备从微信内存提取密钥。请确认：① 微信 Mac 客户端当前处于登录状态 ② 近期在微信里打开过几个对话。确认后继续。"
@@ -142,25 +135,30 @@ cd "$DECRYPT_TOOL" && PYTHONPATH="$LLDB_PYTHON" /Library/Developer/CommandLineTo
 >
 > 也可以先不重启，继续完成本次解密后再重启。"
 
----
-
-### 步骤 6：解密数据库（不需要 SIP）
+然后执行解密：
 
 ```bash
 cd "$DECRYPT_TOOL" && python3 decrypt_db.py 2>&1
 # 成功后在 $DECRYPT_TOOL/decrypted/ 生成 .db 文件
 ```
 
-- 若成功：记录 `$DECRYPT_TOOL/decrypted/` 路径，继续步骤 7
+成功后记录 `$DECRYPT_TOOL/decrypted/` 路径，继续步骤 5。
 
 ---
 
-### 步骤 7：写入配置（自动）
+### 步骤 5：确认用户想分析谁
 
-根据步骤 5 或步骤 6 找到的数据库路径，写入配置：
+环境已就绪。如果调用时未说明联系人，使用 AskUserQuestion 询问：
+> "你想分析和谁的聊天记录？（输入对方的备注名或微信昵称）"
+
+---
+
+### 步骤 6：写入配置（自动）
+
+根据步骤 3 或步骤 4 找到的数据库路径，写入配置：
 
 ```bash
-DB_DIR="<步骤5或6找到的路径>"
+DB_DIR="<步骤3或4找到的路径>"
 cat > "$TOOL_DIR/config.json" << EOF
 {
   "decrypted_db_dir": "$DB_DIR",
@@ -172,10 +170,10 @@ echo "配置已写入：$TOOL_DIR/config.json"
 
 ---
 
-### 步骤 8：查找联系人并导出消息（自动）
+### 步骤 7：查找联系人并导出消息（自动）
 
 ```bash
-cd "$TOOL_DIR" && "$VENV/bin/python" export_contact.py --contact "<步骤1确认的联系人名>" 2>&1
+cd "$TOOL_DIR" && "$VENV/bin/python" export_contact.py --contact "<步骤5确认的联系人名>" 2>&1
 ```
 
 - 若出现多个匹配结果：展示给用户，用 AskUserQuestion 让用户选择编号
@@ -184,7 +182,7 @@ cd "$TOOL_DIR" && "$VENV/bin/python" export_contact.py --contact "<步骤1确认
 
 ---
 
-### 步骤 9a：生成图表与分析输入（自动，无需 API Key）
+### 步骤 8a：生成图表与分析输入（自动，无需 API Key）
 
 ```bash
 cd "$TOOL_DIR" && "$VENV/bin/python" main.py "$CSV_PATH" 2>&1
@@ -197,7 +195,7 @@ cd "$TOOL_DIR" && "$VENV/bin/python" main.py "$CSV_PATH" 2>&1
 
 ---
 
-### 步骤 9b：Claude 直接进行人格分析（无需外部 API）
+### 步骤 8b：Claude 直接进行人格分析（无需外部 API）
 
 **同时**使用 Read 工具读取两个分析输入文件：
 
@@ -258,22 +256,22 @@ cd "$TOOL_DIR" && "$VENV/bin/python" main.py "$CSV_PATH" 2>&1
 
 ---
 
-### 步骤 9c：生成完整对比报告（自动）
+### 步骤 8c：生成完整对比报告（自动）
 
-从步骤 1 取到的联系人名作为 `--partner-name`：
+从步骤 5 取到的联系人名作为 `--partner-name`：
 
 ```bash
 cd "$TOOL_DIR" && "$VENV/bin/python" main.py "$CSV_PATH" \
   --personality-result wechat_analysis_output/personality_result.json \
   --partner-personality-result wechat_analysis_output/partner_result.json \
-  --partner-name "<步骤1确认的联系人名>" 2>&1
+  --partner-name "<步骤5确认的联系人名>" 2>&1
 ```
 
 若无对方分析结果，则省略 `--partner-personality-result` 参数。
 
 ---
 
-### 步骤 10：打开报告
+### 步骤 9：打开报告
 
 ```bash
 open "$TOOL_DIR/wechat_analysis_output/report.html"
@@ -308,5 +306,5 @@ csrutil status
 | SIP 已启用 | 停止并提示 | 按安装指南第 1 步关闭 SIP |
 | 微信未登录 | 提示确认后重试 | 打开微信并登录 |
 | 联系人未找到 | 展示联系人列表 | 确认正确的联系人名称 |
-| personality_input.json 不存在 | 重新运行步骤 9a | — |
+| personality_input.json 不存在 | 重新运行步骤 8a | — |
 | 数据库路径不存在 | 重新搜索路径 | 若仍失败则重新执行解密 |

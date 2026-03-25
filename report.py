@@ -945,7 +945,7 @@ def generate(stats: dict, personality: dict, output_dir: str,
 
 <div class="header" style="--i:0">
   <h1>🍪 微信聊天人格分析报告</h1>
-  <div class="header-meta">由 姜饼探AI 工具生成 · {datetime.now().strftime('%Y年%m月%d日')}</div>
+  <div class="header-meta">{datetime.now().strftime('%Y年%m月%d日')}</div>
   {header_vs}
 </div>
 

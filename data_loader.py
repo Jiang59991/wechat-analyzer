@@ -5,6 +5,71 @@ data_loader.py — 加载和清洗 WeChatMsg 导出的 CSV 数据
 import re
 import pandas as pd
 
+# ── 微信表情占位符 → Unicode Emoji ────────────────────────────────────────────
+# 微信 Mac/iOS 客户端把表情存为 [Grin]、[Laugh] 等英文名称文本，在此统一转换。
+_WECHAT_EMOJI: dict[str, str] = {
+    # ── 笑 ──────────────────────────────────────────────────────────────────
+    'Smile':        '😊',  'Grin':         '😁',  'Laugh':        '😂',
+    'Joy':          '😄',  'Chuckle':      '😄',  'Lol':          '🤣',
+    'Blush':        '☺️',  'Smirk':        '😏',  'Wink':         '😉',
+    'Tongue':       '😛',  'Cool':         '😎',  'Angel':        '😇',
+    'Hehe':         '😄',  'Toothy':       '😁',  'Naughty':      '😝',
+    # ── 哭/难过 ────────────────────────────────────────────────────────────
+    'Cry':          '😢',  'Sob':          '😭',  'Weep':         '😢',
+    'Whimper':      '😥',  'Wronged':      '🥺',  'Pout':         '😔',
+    'Frown':        '🙁',  'Sad':          '😞',
+    # ── 惊讶/疑惑 ──────────────────────────────────────────────────────────
+    'Surprised':    '😯',  'Shock':        '😱',  'Wow':          '😲',
+    'Confused':     '😕',  'Question':     '🤔',  'Think':        '🤔',
+    'Speechless':   '😶',  'Awkward':      '😅',  'Sweat':        '😅',
+    # ── 愤怒/厌恶 ──────────────────────────────────────────────────────────
+    'Scowl':        '😡',  'Angry':        '😠',  'Rage':         '🤬',
+    'Grimace':      '😬',  'Disdain':      '😒',  'Bored':        '😒',
+    # ── 困/累/无语 ─────────────────────────────────────────────────────────
+    'Sleep':        '😴',  'Drowsy':       '😪',  'Sleepy':       '😪',
+    'Yawn':         '🥱',  'Dead':         '💀',  'Skull':        '💀',
+    'Zombie':       '🧟',
+    # ── 害羞/尴尬 ──────────────────────────────────────────────────────────
+    'Shy':          '🙈',  'Embarrassed':  '😳',  'Sneaky':       '🤭',
+    'Insidious':    '😏',  'Trick':        '😜',
+    # ── 手势/动作 ──────────────────────────────────────────────────────────
+    'Clap':         '👏',  'Wave':         '👋',  'Pray':         '🙏',
+    'ThumbsUp':     '👍',  'ThumbsDown':   '👎',  'Ok':           '👌',
+    'Victory':      '✌️',  'Salute':       '🫡',  'Fist':         '✊',
+    'Muscle':       '💪',  'Handshake':    '🤝',  'Hug':          '🤗',
+    'Drool':        '🤤',  'Vomit':        '🤮',  'Sick':         '🤒',
+    # ── 物品/动物 ──────────────────────────────────────────────────────────
+    'Hammer':       '🔨',  'Bomb':         '💣',  'Knife':        '🔪',
+    'Balloon':      '🎈',  'Party':        '🎉',  'Gift':         '🎁',
+    'Flower':       '🌹',  'Heart':        '❤️',  'BrokenHeart':  '💔',
+    'Star':         '⭐',  'Fire':         '🔥',  'Lightning':    '⚡',
+    'Ghost':        '👻',  'Poop':         '💩',  'Alien':        '👾',
+    'Robot':        '🤖',  'Pig':          '🐷',  'Dog':          '🐶',
+    'Cat':          '🐱',  'Monkey':       '🐵',  'Rabbit':       '🐰',
+    # ── 其他常用 ───────────────────────────────────────────────────────────
+    'Kneeling':     '🧎',  'Worship':      '🙇',  'Facepalm':     '🤦',
+    'Shrug':        '🤷',  'Monocle':      '🧐',  'Nerd':         '🤓',
+    'Cowboy':       '🤠',  'Pirate':       '🏴‍☠️', 'Ninja':        '🥷',
+    'Strong':       '💪',  'Run':          '🏃',  'Dance':        '💃',
+    'NoSee':        '🙈',  'NoHear':       '🙉',  'NoSpeak':      '🙊',
+    'Expressive':   '🤪',  'Crazy':        '🤪',  'Starstruck':   '🤩',
+    'Melting':      '🫠',  'Saliva':       '🤤',  'Triumph':      '😤',
+    'Moai':         '🗿',
+}
+# 构建大小写不敏感的替换 pattern
+_EMOJI_RE = re.compile(
+    r'\[(' + '|'.join(re.escape(k) for k in _WECHAT_EMOJI) + r')\]',
+    re.IGNORECASE
+)
+
+
+def _replace_wechat_emoji(text: str) -> str:
+    """把微信表情占位符替换为对应的 Unicode Emoji"""
+    return _EMOJI_RE.sub(
+        lambda m: _WECHAT_EMOJI.get(m.group(1), _WECHAT_EMOJI.get(m.group(1).capitalize(), m.group(0))),
+        text
+    )
+
 # 低信号消息的正则过滤（单字/语气词/纯emoji占位符）
 _NOISE_RE = re.compile(
     r'^(好|嗯+|哦|哈+|ok|OK|好的|收到|嗯嗯+|好哒|好滴|是的|对|呢|吧|啊|哎|\[.*?\])$',
@@ -57,6 +122,7 @@ def load(csv_path: str, sender: int = 1) -> pd.DataFrame:
     df = df[df['is_sender'] == sender].copy()
 
     df['content'] = df['content'].fillna('').astype(str)
+    df['content'] = df['content'].apply(_replace_wechat_emoji)
     df = df[df['content'].str.len() > 0]
 
     # 时间解析（Unix 秒）

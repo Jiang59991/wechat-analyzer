@@ -27,11 +27,23 @@ import os
 import sys
 
 import data_loader
+from data_loader import _replace_wechat_emoji
 import report as report_mod
 import sampler
 import stats as stats_mod
 import visualizer
 from personality import extract_features
+
+
+def _fix_emoji(obj):
+    """递归替换 JSON 对象中所有字符串里的微信表情占位符"""
+    if isinstance(obj, str):
+        return _replace_wechat_emoji(obj)
+    if isinstance(obj, dict):
+        return {k: _fix_emoji(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_fix_emoji(v) for v in obj]
+    return obj
 
 
 def _load_meta(csv_path: str) -> dict:
@@ -157,7 +169,7 @@ def main():
             print(f'❌ 找不到人格分析结果文件：{args.personality_result}')
             sys.exit(1)
         with open(args.personality_result, encoding='utf-8') as f:
-            personality_result = json.load(f)
+            personality_result = _fix_emoji(json.load(f))
         print(f'\n🧠 已读取自己的人格分析结果：{args.personality_result}')
 
         if args.partner_personality_result:
@@ -165,7 +177,7 @@ def main():
                 print(f'⚠️  找不到对方人格分析结果文件：{args.partner_personality_result}，将跳过对比')
             else:
                 with open(args.partner_personality_result, encoding='utf-8') as f:
-                    partner_personality = json.load(f)
+                    partner_personality = _fix_emoji(json.load(f))
                 print(f'🧠 已读取对方（{partner_name}）的人格分析结果')
 
         big5 = personality_result.get('big5', {})

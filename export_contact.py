@@ -202,32 +202,55 @@ def get_self_nick(db_dir: Path, self_wxid: str) -> str | None:
     return None
 
 
-def get_avatar_path(wxid: str) -> str | None:
-    """在 Mac 微信文件目录中搜索头像图片，返回路径或 None"""
+def get_avatar_path(wxid: str, db_dir: Path | None = None) -> str | None:
+    """搜索头像：先查文件系统缓存，再从 head_image.db 提取，失败返回 None。
+    若从数据库读取，将图片写入临时文件并返回其路径。"""
     import glob as _glob
-    wechat_base = Path.home() / 'Library/Containers/com.tencent.xinWeChat'
-    if not wechat_base.exists():
-        return None
+    import tempfile
 
-    wxid_md5 = hashlib.md5(wxid.encode()).hexdigest()
-
-    # 常见头像缓存路径
-    patterns = [
-        str(wechat_base / 'Data/Documents/xwechat_files/*/Avatars' / wxid_md5),
-        str(wechat_base / 'Data/Documents/xwechat_files/*/Avatars' / f'{wxid_md5}*'),
-        str(wechat_base / 'Data/Library/Application Support/com.tencent.xinWeChat/*/Avatars' / wxid_md5),
-        str(wechat_base / 'Data/Library/Application Support/com.tencent.xinWeChat/*/Avatars' / f'{wxid_md5}*'),
-    ]
     IMAGE_MAGIC = (b'\xff\xd8\xff', b'\x89PNG', b'GIF8', b'RIFF', b'\x00\x00\x01\x00')
-    for pattern in patterns:
-        for m in _glob.glob(pattern):
+
+    # 方法1：文件系统缓存
+    wechat_base = Path.home() / 'Library/Containers/com.tencent.xinWeChat'
+    if wechat_base.exists():
+        wxid_md5 = hashlib.md5(wxid.encode()).hexdigest()
+        patterns = [
+            str(wechat_base / 'Data/Documents/xwechat_files/*/Avatars' / wxid_md5),
+            str(wechat_base / 'Data/Documents/xwechat_files/*/Avatars' / f'{wxid_md5}*'),
+            str(wechat_base / 'Data/Library/Application Support/com.tencent.xinWeChat/*/Avatars' / wxid_md5),
+            str(wechat_base / 'Data/Library/Application Support/com.tencent.xinWeChat/*/Avatars' / f'{wxid_md5}*'),
+        ]
+        for pattern in patterns:
+            for m in _glob.glob(pattern):
+                try:
+                    with open(m, 'rb') as f:
+                        header = f.read(8)
+                    if any(header.startswith(sig) for sig in IMAGE_MAGIC):
+                        return m
+                except Exception:
+                    continue
+
+    # 方法2：从解密数据库的 head_image 表读取 BLOB
+    if db_dir is not None:
+        head_db = Path(db_dir) / 'head_image' / 'head_image.db'
+        if head_db.exists():
             try:
-                with open(m, 'rb') as f:
-                    header = f.read(8)
-                if any(header.startswith(sig) for sig in IMAGE_MAGIC):
-                    return m
+                conn = sqlite3.connect(head_db)
+                row = conn.execute(
+                    "SELECT image_buffer FROM head_image WHERE username = ?", (wxid,)
+                ).fetchone()
+                conn.close()
+                if row and row[0]:
+                    data = bytes(row[0])
+                    if any(data.startswith(sig) for sig in IMAGE_MAGIC):
+                        ext = '.jpg' if data[:3] == b'\xff\xd8\xff' else '.png'
+                        tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+                        tmp.write(data)
+                        tmp.close()
+                        return tmp.name
             except Exception:
-                continue
+                pass
+
     return None
 
 
@@ -289,8 +312,8 @@ def main():
 
     # 写 meta sidecar JSON（昵称 + 头像路径）
     self_nick = get_self_nick(db_dir, self_wxid) or '我'
-    self_avatar = get_avatar_path(self_wxid)
-    partner_avatar = get_avatar_path(username)
+    self_avatar = get_avatar_path(self_wxid, db_dir)
+    partner_avatar = get_avatar_path(username, db_dir)
     meta = {
         'self_wxid': self_wxid,
         'self_name': self_nick,

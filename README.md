@@ -6,12 +6,18 @@
 
 ## 效果预览
 
-| 可视化图表 | AI 人格分析 |
-|-----------|------------|
-| 聊天频率日历热力图（GitHub 风格） | Big Five 人格 · 蝴蝶对比图 |
-| 每小时 / 每月 / 星期发消息趋势 | MBTI 四维推断 + 置信度 |
-| 双人高频词词云（左右并排对比） | 一句话性格总结 + 沟通风格 |
-| 消息长度分布 | Big Five 雷达图（单人模式） |
+![报告总览](pics/preview-header.png)
+
+<table>
+<tr>
+<td width="50%"><img src="pics/preview-wordcloud-big5.png" alt="词云对比 + Big Five 蝴蝶图"></td>
+<td width="50%"><img src="pics/preview-heatmap.png" alt="聊天频率热力图"></td>
+</tr>
+<tr>
+<td width="50%"><img src="pics/preview-mbti.png" alt="MBTI 双人推断"></td>
+<td width="50%"><img src="pics/preview-style.png" alt="AI 风格总结"></td>
+</tr>
+</table>
 
 所有内容整合为一份精美 HTML 报告，图表可直接截图发布。
 
