@@ -33,7 +33,7 @@
 **克隆仓库，在目录内打开 Claude Code，即可使用。**
 
 ```bash
-git clone https://github.com/your-username/wechat-analyzer.git ~/wechat-analyzer
+git clone https://github.com/Jiang59991/wechat-analyzer.git ~/wechat-analyzer
 cd ~/wechat-analyzer
 claude
 ```
