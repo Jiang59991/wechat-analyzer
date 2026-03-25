@@ -1,0 +1,9 @@
+pandas>=2.0.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+jieba>=0.42.1
+wordcloud>=1.9.0
+anthropic>=0.40.0
+Pillow>=10.0.0
+zstd

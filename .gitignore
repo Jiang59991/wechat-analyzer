@@ -1,0 +1,15 @@
+# 用户数据 — 不提交
+config.json
+export_*.csv
+*.meta.json
+wechat_analysis_output/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
