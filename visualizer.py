@@ -4,6 +4,7 @@ visualizer.py — 生成所有可视化图表（姜饼棕白风格）
 
 import os
 from collections import Counter
+from typing import Optional
 
 import matplotlib
 import matplotlib.font_manager as fm
@@ -25,7 +26,7 @@ TEAL_DARK    = '#4A7B6F'
 TEAL_MID     = '#6FAA9C'
 
 # 词云字体文件路径（需要文件路径，不能只用字体名称）
-_WC_FONT_PATH: str | None = None
+_WC_FONT_PATH: Optional[str] = None
 
 # 候选字体文件路径
 _FONT_FILE_CANDIDATES = [
@@ -40,7 +41,7 @@ _FONT_FILE_CANDIDATES = [
 
 
 # ── 字体检测 ──────────────────────────────────────────────────────────────────
-def setup_font() -> str | None:
+def setup_font() -> Optional[str]:
     global _WC_FONT_PATH
     candidates = [
         'PingFang SC', 'Heiti SC', 'STHeiti', 'STSong',

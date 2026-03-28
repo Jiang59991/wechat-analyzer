@@ -14,10 +14,12 @@ import csv
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 _SCRIPT_DIR = Path(__file__).parent
 _CONFIG_PATH = _SCRIPT_DIR / 'config.json'
@@ -30,22 +32,70 @@ def load_config() -> dict:
     return {}
 
 
+def _looks_like_db_storage(path: Path) -> bool:
+    return (
+        (path / 'contact' / 'contact.db').exists() and
+        (path / 'message' / 'message_0.db').exists()
+    )
+
+
+def _resolve_db_dir(base: Path) -> Optional[Path]:
+    """兼容直接传 db_storage 目录，或传 decrypt_db.py 输出根目录。"""
+    if _looks_like_db_storage(base):
+        return base
+
+    candidates = []
+    for pattern in ('wxid_*/db_storage', '*/db_storage'):
+        for candidate in base.glob(pattern):
+            if not candidate.is_dir() or not _looks_like_db_storage(candidate):
+                continue
+            msg_db = candidate / 'message' / 'message_0.db'
+            mtime = msg_db.stat().st_mtime if msg_db.exists() else 0
+            candidates.append((mtime, candidate))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    chosen = candidates[0][1]
+    print(f"[*] 自动选择解密数据库目录：{chosen}")
+    return chosen
+
+
 def get_db_dir() -> Path:
     cfg = load_config()
     db_dir = cfg.get('decrypted_db_dir', '')
     if db_dir:
         p = Path(os.path.expanduser(db_dir))
-        if p.exists():
-            return p
+        resolved = _resolve_db_dir(p) if p.exists() else None
+        if resolved is not None:
+            return resolved
     default = Path.home() / 'Documents/wechat-db-decrypt-macos/decrypted'
-    if default.exists():
-        return default
+    resolved = _resolve_db_dir(default) if default.exists() else None
+    if resolved is not None:
+        return resolved
     print("❌ 找不到解密数据库目录。请检查 config.json 中的 decrypted_db_dir 路径。")
     sys.exit(1)
 
 
 def md5(text: str) -> str:
     return hashlib.md5(text.encode()).hexdigest()
+
+
+def get_message_dbs(db_dir: Path) -> list[Path]:
+    """返回所有已解密的 message_N.db，按编号排序。"""
+    msg_dir = db_dir / 'message'
+    if not msg_dir.exists():
+        return []
+
+    paths = []
+    for path in msg_dir.glob('message_*.db'):
+        m = re.fullmatch(r'message_(\d+)\.db', path.name)
+        if m:
+            paths.append((int(m.group(1)), path))
+
+    paths.sort(key=lambda item: item[0])
+    return [path for _, path in paths]
 
 
 def list_contacts(db_dir: Path):
@@ -87,7 +137,11 @@ def get_self_wxid(db_dir: Path) -> str:
             return candidates[0]
 
     # 方法2：从 Name2Id 表中找唯一的 wxid_ 账号（排除联系人）
-    msg_db = db_dir / 'message' / 'message_0.db'
+    msg_dbs = get_message_dbs(db_dir)
+    if not msg_dbs:
+        return None
+
+    msg_db = msg_dbs[0]
     contact_db = db_dir / 'contact' / 'contact.db'
     conn = sqlite3.connect(msg_db)
     rows = conn.execute("SELECT user_name FROM Name2Id").fetchall()
@@ -124,25 +178,38 @@ def get_sender_rowids(msg_db: Path, self_wxid: str, contact_wxid: str):
 def export_messages(db_dir: Path, contact_wxid: str, contact_name: str,
                     self_wxid: str, output_path: Path):
     table = f"Msg_{md5(contact_wxid)}"
-    msg_db = db_dir / 'message' / 'message_0.db'
-
-    conn = sqlite3.connect(msg_db)
-    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
-    if table not in tables:
-        print(f"❌ 找不到消息表 {table}，可能没有与此联系人的消息记录。")
-        conn.close()
+    msg_dbs = get_message_dbs(db_dir)
+    if not msg_dbs:
+        print("❌ 找不到已解密的 message_N.db 文件。")
         sys.exit(1)
 
-    self_id, _ = get_sender_rowids(msg_db, self_wxid, contact_wxid)
+    merged_rows = []
+    matched_dbs = []
+    for msg_db in msg_dbs:
+        conn = sqlite3.connect(msg_db)
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if table not in tables:
+            conn.close()
+            continue
 
-    rows = conn.execute(
-        f"SELECT create_time, real_sender_id, local_type, message_content "
-        f"FROM {table} ORDER BY create_time ASC"
-    ).fetchall()
-    conn.close()
+        self_id, _ = get_sender_rowids(msg_db, self_wxid, contact_wxid)
+        rows = conn.execute(
+            f"SELECT create_time, real_sender_id, local_type, message_content "
+            f"FROM {table} ORDER BY create_time ASC"
+        ).fetchall()
+        conn.close()
 
-    msg_count = len(rows)
-    print(f"[*] 找到 {msg_count} 条消息")
+        matched_dbs.append(msg_db.name)
+        merged_rows.extend((create_time, sender_id, local_type, content, self_id)
+                           for create_time, sender_id, local_type, content in rows)
+
+    if not merged_rows:
+        print(f"❌ 找不到消息表 {table}，可能没有与此联系人的消息记录。")
+        sys.exit(1)
+
+    merged_rows.sort(key=lambda row: row[0])
+    msg_count = len(merged_rows)
+    print(f"[*] 找到 {msg_count} 条消息（来自 {', '.join(matched_dbs)}）")
 
     try:
         import zstd
@@ -164,20 +231,44 @@ def export_messages(db_dir: Path, contact_wxid: str, contact_name: str,
             return raw.decode('utf-8', errors='replace')
         return str(raw)
 
+    json_records = []
+
     with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         writer.writerow(['timestamp', 'datetime', 'sender', 'is_sender', 'type', 'content'])
-        for create_time, sender_id, local_type, content in rows:
+        for create_time, sender_id, local_type, content, self_id in merged_rows:
             dt = datetime.fromtimestamp(create_time).strftime('%Y-%m-%d %H:%M:%S')
             is_self = 1 if sender_id == self_id else 0
             sender_name = '我' if is_self else contact_name
-            writer.writerow([create_time, dt, sender_name, is_self, local_type, decode_content(content)])
+            text = decode_content(content)
+            writer.writerow([create_time, dt, sender_name, is_self, local_type, text])
+            json_records.append({
+                'timestamp': int(create_time),
+                'datetime': dt,
+                'sender': sender_name,
+                'is_sender': int(is_self),
+                'type': int(local_type),
+                'content': text,
+            })
+
+    json_path = output_path.with_suffix('.json')
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump({
+            'format': 'wechat_chat_export_v1',
+            'contact_wxid': contact_wxid,
+            'contact_name': contact_name,
+            'self_wxid': self_wxid,
+            'message_count': msg_count,
+            'source_databases': matched_dbs,
+            'messages': json_records,
+        }, f, ensure_ascii=False, indent=2)
 
     print(f"EXPORT_PATH:{output_path}")
+    print(f"JSON_PATH:{json_path}")
     return msg_count
 
 
-def get_self_nick(db_dir: Path, self_wxid: str) -> str | None:
+def get_self_nick(db_dir: Path, self_wxid: str) -> Optional[str]:
     """尝试从 contact.db 或微信文件目录获取自己的昵称"""
     # 方法1：contact.db 里可能有自己的记录
     try:
@@ -202,7 +293,7 @@ def get_self_nick(db_dir: Path, self_wxid: str) -> str | None:
     return None
 
 
-def get_avatar_path(wxid: str, db_dir: Path | None = None) -> str | None:
+def get_avatar_path(wxid: str, db_dir: Optional[Path] = None) -> Optional[str]:
     """搜索头像：先查文件系统缓存，再从 head_image.db 提取，失败返回 None。
     若从数据库读取，将图片写入临时文件并返回其路径。"""
     import glob as _glob

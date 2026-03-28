@@ -25,6 +25,7 @@ import base64
 import json
 import os
 import sys
+from typing import Optional
 
 import data_loader
 from data_loader import _replace_wechat_emoji
@@ -58,7 +59,7 @@ def _load_meta(csv_path: str) -> dict:
     return {}
 
 
-def _avatar_b64(path: str | None) -> str | None:
+def _avatar_b64(path: Optional[str]) -> Optional[str]:
     """读取头像文件并转为 base64 data URI，失败返回 None"""
     if not path or not os.path.exists(path):
         return None

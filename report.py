@@ -5,6 +5,7 @@ report.py — 生成最终 HTML 报告（双栏对比 + 热力图版）
 import json as _json
 import os
 from datetime import datetime
+from typing import Optional
 
 
 # ── CSS ──────────────────────────────────────────────────────────────────────
@@ -638,7 +639,7 @@ function initHeatmap(selfData, partnerData, hasPartner) {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _av(name: str, data: str | None, size: int = 38, cls: str = 'av-self') -> str:
+def _av(name: str, data: Optional[str], size: int = 38, cls: str = 'av-self') -> str:
     initial = name[:1] if name else '?'
     inner = (f'<img src="{data}" alt="{initial}" onerror="this.style.display=\'none\';'
              f'this.parentNode.textContent=\'{initial}\'">' if data else initial)
@@ -646,12 +647,12 @@ def _av(name: str, data: str | None, size: int = 38, cls: str = 'av-self') -> st
             f'style="width:{size}px;height:{size}px;font-size:{size//2}px">{inner}</div>')
 
 
-def _pill(name: str, data: str | None, partner: bool = False) -> str:
+def _pill(name: str, data: Optional[str], partner: bool = False) -> str:
     av = _av(name, data, size=38, cls='av-partner' if partner else 'av-self')
     return f'<div class="person-pill">{av}<span class="pill-name">{name}</span></div>'
 
 
-def _tag(name: str, data: str | None, partner: bool = False) -> str:
+def _tag(name: str, data: Optional[str], partner: bool = False) -> str:
     cls = 'tag-partner' if partner else 'tag-self'
     initial = name[:1] if name else '?'
     inner = (f'<img src="{data}" alt="{initial}" onerror="this.style.display=\'none\';'
@@ -663,7 +664,7 @@ def _tag(name: str, data: str | None, partner: bool = False) -> str:
 # ── Section builders ──────────────────────────────────────────────────────────
 
 def _butterfly_big5(b5s: dict, b5p: dict,
-                    sn: str, pn: str, sa: str | None, pa: str | None) -> str:
+                    sn: str, pn: str, sa: Optional[str], pa: Optional[str]) -> str:
     labels = [
         ('openness',          '开放性', 'Openness'),
         ('conscientiousness', '尽责性', 'Conscientiousness'),
@@ -740,7 +741,7 @@ def _single_big5(big5: dict) -> str:
 
 
 def _mbti_panel(mbti: dict, partner: bool = False,
-                name: str = '?', av: str | None = None) -> str:
+                name: str = '?', av: Optional[str] = None) -> str:
     mtype = mbti.get('type', '??')
     conf, note = mbti.get('confidence', '低'), mbti.get('note', '')
     dims = mbti.get('dims', {})
@@ -767,7 +768,7 @@ def _mbti_panel(mbti: dict, partner: bool = False,
 
 
 def _style_panel(style: dict, partner: bool = False,
-                 name: str = '?', av: str | None = None) -> str:
+                 name: str = '?', av: Optional[str] = None) -> str:
     one_line  = style.get('one_line', '')
     summary   = style.get('summary', '')
     strengths = style.get('strengths', [])
@@ -787,8 +788,8 @@ def _style_panel(style: dict, partner: bool = False,
     </div>'''
 
 
-def _heatmap_html(stats_self: dict, stats_partner: dict | None,
-                  sn: str, pn: str, sa: str | None, pa: str | None) -> str:
+def _heatmap_html(stats_self: dict, stats_partner: Optional[dict],
+                  sn: str, pn: str, sa: Optional[str], pa: Optional[str]) -> str:
     """生成热力图 HTML + 内嵌 JS"""
     daily_self = {str(k): int(v) for k, v in stats_self['daily'].items()}
 
@@ -851,8 +852,8 @@ def generate(stats: dict, personality: dict, output_dir: str,
              partner_personality: dict = None,
              self_name: str = '我',
              partner_name: str = '对方',
-             self_avatar_data: str | None = None,
-             partner_avatar_data: str | None = None,
+             self_avatar_data: Optional[str] = None,
+             partner_avatar_data: Optional[str] = None,
              has_pair_wordcloud: bool = False) -> str:
 
     dr = stats['date_range']
